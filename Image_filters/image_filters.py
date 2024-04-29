@@ -4,6 +4,22 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
+def mse(imageA, imageB):
+    err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
+    err /= float(imageA.shape[0] * imageA.shape[1])
+    return err
+
+
+def add_noise(image):
+    row, col, ch = image.shape
+    mean = 0
+    var = 500 
+    sigma = var**0.5
+    gauss = np.random.normal(mean, sigma, (row, col, ch))
+    gauss = gauss.reshape(row, col, ch)
+    noisy = image + gauss
+    return noisy
+
 
 def custom_convolution(img, kernel):
     pad_size = kernel.shape[0] // 2
@@ -59,22 +75,25 @@ def custom_bilateral_filter(img, kernel_size, sigma_color, sigma_space):
     return filtered_img
 
 
-def compare_filters(original_img, filtered_imgs, titles):
-    n = len(filtered_imgs) + 1
-    cols = 2
-    rows = math.ceil(n / cols)
-
+def compare_filters(original_img, noisy_img, filtered_imgs, titles):
     plt.figure(figsize=(15, 15))
-    plt.subplot(rows, cols, 1)
+
+    plt.subplot(2, 2, 1)
     plt.imshow(cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB))
     plt.title("Original")
     cv2.imwrite(os.path.join(images_dir, "original.png"), original_img)
 
-    for i, (filtered_img, title) in enumerate(zip(filtered_imgs, titles), start=2):
+    noisy_img = cv2.convertScaleAbs(noisy_img)
+    plt.subplot(2, 2, 2)
+    plt.imshow(cv2.cvtColor(noisy_img, cv2.COLOR_BGR2RGB))
+    plt.title("Noisy")
+    cv2.imwrite(os.path.join(images_dir, "noisy.png"), noisy_img)
+
+    for i, (filtered_img, title) in enumerate(zip(filtered_imgs, titles), start=4):
         filtered_img = cv2.convertScaleAbs(filtered_img)
-        plt.subplot(rows, cols, i)
+        plt.subplot(2, 3, i)
         plt.imshow(cv2.cvtColor(filtered_img, cv2.COLOR_BGR2RGB))
-        plt.title(title)
+        plt.title(f"{title} (MSE: {mse(original_img, filtered_img):.3f})")  # Dodano formatowanie do 3 miejsc po przecinku
         cv2.imwrite(os.path.join(images_dir, f"{title}.png"), filtered_img)
     plt.show()
 
@@ -88,25 +107,40 @@ def main():
         os.makedirs(images_dir)
 
     img = cv2.imread("image.jpg")
+    noisy_img = add_noise(img)
     kernel_size = 5
     kernel_shape = np.ones((kernel_size, kernel_size), np.float32) / (kernel_size**2)
 
     print("Performing convolution filtering...")
-    filtered_img_1 = custom_convolution(img, kernel_shape)
+    filtered_img_1 = custom_convolution(noisy_img, kernel_shape)
+    mse_1 = mse(img, filtered_img_1)
+    print(f"MSE for Convolution: {mse_1}")
 
     print("Performing median filtering...")
-    filtered_img_2 = custom_median_blur(img, kernel_size)
+    filtered_img_2 = custom_median_blur(noisy_img, kernel_size)
+    mse_2 = mse(img, filtered_img_2)
+    print(f"MSE for Median Blur: {mse_2}")
 
     print("Performing bilateral filtering...")
-    filtered_img_3 = custom_bilateral_filter(img, kernel_size, 75, 75)
+    filtered_img_3 = custom_bilateral_filter(noisy_img, kernel_size, 75, 75)
+    mse_3 = mse(img, filtered_img_3)
+    print(f"MSE for Bilateral Filter: {mse_3}")
 
     print("Comparing filter results...")
     compare_filters(
         img,
+        noisy_img,
         [filtered_img_1, filtered_img_2, filtered_img_3],
         ["Convolution", "Median Blur", "Bilateral Filter"],
     )
 
+    min_mse = min([mse_1, mse_2, mse_3])
+    if min_mse == mse_1:
+        print("Convolution has the smallest MSE.")
+    elif min_mse == mse_2:
+        print("Median Blur has the smallest MSE.")
+    else:
+        print("Bilateral Filter has the smallest MSE.")
 
 if __name__ == "__main__":
     main()
